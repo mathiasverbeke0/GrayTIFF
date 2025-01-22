@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GrayTIFF</title>
+    <link href="styles/tailwind.min.css" rel="stylesheet">
+    <style>
+        .footer-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .footer-button {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            color: #4a5568;
+            background-color: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.375rem;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .footer-button:hover {
+            color: #2d3748;
+            background-color: #f7fafc;
+            border-color: #cbd5e0;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .footer-button svg {
+            width: 16px;
+            height: 16px;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div class="max-w-4xl mx-auto p-6">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">GrayTIFF</h1>
+            <p class="text-gray-600">Convert images to 8-bit grayscale TIFF format</p>
+        </header>
+
+        <div class="bg-white rounded-lg shadow-lg p-8">
+            <div class="drop-zone border-2 border-dashed border-blue-300 rounded-lg p-8 text-center bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer" id="dropZone">
+                <div class="space-y-4">
+                    <svg class="mx-auto h-12 w-12 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                    </svg>
+                    <div class="text-gray-600">
+                        <p class="font-medium">Drop your image here or click to browse</p>
+                        <p class="text-sm mt-2">Supports JPEG, PNG, BMP, GIF, TIFF</p>
+                    </div>
+                </div>
+                <input type="file" id="fileInput" accept=".jpeg,.jpg,.png,.bmp,.gif,.tiff,.tif" class="hidden">
+            </div>
+
+            <div id="progressContainer" class="hidden mt-6">
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <p id="statusText" class="text-sm text-gray-600 text-center mt-2">Processing...</p>
+            </div>
+
+            <div id="downloadContainer" class="hidden mt-6 text-center">
+                <button id="downloadButton" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-6 rounded-lg transition-colors">
+                    Download Image
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-buttons">
+        <a href="https://github.com/mathiasverbeke0/GrayTIFF" class="footer-button" target="_blank" rel="noopener noreferrer">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+          </svg>
+          About
+        </a>
+        <a href="mailto:mathias.verbeke@howest.be" class="footer-button">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+            <polyline points="22,6 12,13 2,6"></polyline>
+          </svg>
+          Contact
+        </a>
+      </div>
+    </div>
+
+    <script src="javascript/UTIF.js"></script>
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const statusText = document.getElementById('statusText');
+        const downloadContainer = document.getElementById('downloadContainer');
+        const downloadButton = document.getElementById('downloadButton');
+        
+        let currentTiffBlob = null;
+        let currentFileName = '';
+
+        function createTIFFHeader(width, height) {
+            const header = new ArrayBuffer(8);
+            const view = new DataView(header);
+            
+            view.setUint16(0, 0x4949, true);
+            view.setUint16(2, 42, true);
+            view.setUint32(4, 8, true);
+            
+            return new Uint8Array(header);
+        }
+
+        function createIFD(width, height, stripOffset) {
+            const numEntries = 10;
+            const ifdSize = 2 + (numEntries * 12) + 4;
+            const ifd = new ArrayBuffer(ifdSize);
+            const view = new DataView(ifd);
+            
+            view.setUint16(0, numEntries, true);
+            
+            let offset = 2;
+            
+            // ImageWidth
+            view.setUint16(offset, 256, true);
+            view.setUint16(offset + 2, 4, true);
+            view.setUint32(offset + 4, 1, true);
+            view.setUint32(offset + 8, width, true);
+            offset += 12;
+            
+            // ImageLength
+            view.setUint16(offset, 257, true);
+            view.setUint16(offset + 2, 4, true);
+            view.setUint32(offset + 4, 1, true);
+            view.setUint32(offset + 8, height, true);
+            offset += 12;
+            
+            // BitsPerSample
+            view.setUint16(offset, 258, true);
+            view.setUint16(offset + 2, 3, true);
+            view.setUint32(offset + 4, 1, true);
+            view.setUint16(offset + 8, 8, true);
+            offset += 12;
+            
+            // Compression
+            view.setUint16(offset, 259, true);
+            view.setUint16(offset + 2, 3, true);
+            view.setUint32(offset + 4, 1, true);
+            view.setUint16(offset + 8, 1, true);
+            offset += 12;
+            
+            // PhotometricInterpretation
+            view.setUint16(offset, 262, true);
+            view.setUint16(offset + 2, 3, true);
+            view.setUint32(offset + 4, 1, true);
+            view.setUint16(offset + 8, 1, true);
+            offset += 12;
+            
+            // StripOffsets
+            view.setUint16(offset, 273, true);
+            view.setUint16(offset + 2, 4, true);
+            view.setUint32(offset + 4, 1, true);
+            view.setUint32(offset + 8, stripOffset, true);
+            offset += 12;
+            
+            // RowsPerStrip
+            view.setUint16(offset, 278, true);
+            view.setUint16(offset + 2, 4, true);
+            view.setUint32(offset + 4, 1, true);
+            view.setUint32(offset + 8, height, true);
+            offset += 12;
+            
+            // StripByteCounts
+            view.setUint16(offset, 279, true);
+            view.setUint16(offset + 2, 4, true);
+            view.setUint32(offset + 4, 1, true);
+            view.setUint32(offset + 8, width * height, true);
+            offset += 12;
+            
+            // XResolution
+            view.setUint16(offset, 282, true);
+            view.setUint16(offset + 2, 5, true);
+            view.setUint32(offset + 4, 1, true);
+            view.setUint32(offset + 8, 72, true);
+            offset += 12;
+            
+            // YResolution
+            view.setUint16(offset, 283, true);
+            view.setUint16(offset + 2, 5, true);
+            view.setUint32(offset + 4, 1, true);
+            view.setUint32(offset + 8, 72, true);
+            
+            view.setUint32(ifdSize - 4, 0, true);
+            
+            return new Uint8Array(ifd);
+        }
+
+        function convertToGrayscale(imageData, width, height) {
+            const grayscaleData = new Uint8Array(width * height);
+            
+            for (let i = 0; i < imageData.length; i += 4) {
+                const gray = Math.round(0.299 * imageData[i] + 
+                                     0.587 * imageData[i + 1] + 
+                                     0.114 * imageData[i + 2]);
+                grayscaleData[i / 4] = gray;
+                
+                if (i % 40000 === 0) {
+                    const progress = (i / imageData.length) * 100;
+                    progressBar.style.width = `${progress}%`;
+                }
+            }
+            
+            return grayscaleData;
+        }
+
+        function createTIFF(grayscaleData, width, height) {
+            const headerSize = 8;
+            const ifdSize = 2 + (10 * 12) + 4;
+            const stripOffset = headerSize + ifdSize;
+            
+            const header = createTIFFHeader(width, height);
+            const ifd = createIFD(width, height, stripOffset);
+            
+            const tiffData = new Uint8Array(stripOffset + grayscaleData.length);
+            tiffData.set(header, 0);
+            tiffData.set(ifd, headerSize);
+            tiffData.set(grayscaleData, stripOffset);
+            
+            return tiffData;
+        }
+
+        function processImage(file) {
+            currentFileName = file.name;
+            downloadContainer.classList.add('hidden');
+            progressContainer.classList.remove('hidden');
+            progressBar.style.width = '0%';
+            statusText.textContent = 'Processing...';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                    const grayscaleData = convertToGrayscale(imageData.data, canvas.width, canvas.height);
+                    const tiffData = createTIFF(grayscaleData, canvas.width, canvas.height);
+                    
+                    currentTiffBlob = new Blob([tiffData], { type: 'image/tiff' });
+                    
+                    progressContainer.classList.add('hidden');
+                    downloadContainer.classList.remove('hidden');
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        downloadButton.addEventListener('click', () => {
+            if (currentTiffBlob) {
+                const url = URL.createObjectURL(currentTiffBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = currentFileName.split('.')[0] + '_grayscale.tiff';
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        });
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-blue-500');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-blue-500');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-blue-500');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            const file = files[0];
+            if (file && file.type.startsWith('image/')) {
+                processImage(file);
+            }
+        }
+    </script>
+</body>
+</html>
